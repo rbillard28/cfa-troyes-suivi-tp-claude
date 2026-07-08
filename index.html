@@ -69,29 +69,15 @@ html, body{ overflow-x:hidden; } /* garde-fou : jamais de scroll horizontal invo
   border-right:1px solid var(--line);
   display:flex; flex-direction:column;
   position:fixed; top:0; left:0; height:100vh; z-index:30;
-  transform:translateX(-100%);
-  transition:transform .2s ease, width .2s ease;
+  transform:translateX(-100%); /* état par défaut (mobile) : tiroir fermé */
+  transition:transform .2s ease, width .15s ease;
+  overflow:hidden;
 }
-body.nav-open .sidebar{ transform:translateX(0); }
-
-/* Mode "rétracté" (icônes seules) — disponible uniquement en desktop large */
-.sidebar.collapsed{ width:64px; }
-.sidebar.collapsed .brand .sub,
-.sidebar.collapsed .nav-item span:not(.num),
-.sidebar.collapsed .conn-block,
-.sidebar.collapsed .sidebar-foot .gear-btn ~ *{ display:none; }
-.sidebar.collapsed .brand{ padding:22px 0 16px; text-align:center; }
-.sidebar.collapsed .brand .mark{ font-size:0; }
-.sidebar.collapsed .brand .mark .bolt{ font-size:18px; }
-.sidebar.collapsed .nav-item{ justify-content:center; padding:10px 6px; }
-.sidebar.collapsed .nav-item .num{ display:none; }
-.sidebar.collapsed .sidebar-foot{ justify-content:center; }
 
 .backdrop{
   display:none; position:fixed; inset:0; background:#05080ACC;
   z-index:25;
 }
-body.nav-open .backdrop{ display:block; }
 
 .collapse-btn{
   position:absolute; top:20px; right:-13px;
@@ -166,12 +152,55 @@ body.nav-open .backdrop{ display:block; }
 }
 .gear-btn:hover{ border-color:var(--copper); color:var(--copper); }
 
-.main{ flex:1; min-width:0; display:flex; flex-direction:column; transition:margin-left .2s ease; width:100%; }
+.main{ flex:1; min-width:0; display:flex; flex-direction:column; transition:margin-left .15s ease; width:100%; }
 
-/* Sur grand écran, le menu ouvert pousse le contenu (au lieu de le recouvrir) */
+/* ============================================================
+   DESKTOP (>=900px) — sidebar toujours visible, mode "survol"
+   Réduite à des icônes par défaut ; s'élargit automatiquement au
+   survol de la souris et se rétracte dès qu'elle la quitte, sans
+   avoir besoin de cliquer ailleurs. Le bouton "‹/›" permet de
+   l'épingler grande ouverte en permanence si préféré.
+   ============================================================ */
 @media(min-width:900px){
-  body.nav-open .main{ margin-left:230px; }
-  body.nav-open .sidebar.collapsed + .main{ margin-left:64px; }
+  .sidebar{ transform:translateX(0); width:64px; } /* toujours visible, réduite par défaut */
+  .sidebar:not(.pinned):hover{ width:230px; }
+  .sidebar.pinned{ width:230px; }
+
+  /* Contenu masqué en mode réduit, réapparaît au survol ou si épinglée */
+  .sidebar .brand .sub,
+  .sidebar .nav-item span:not(.num),
+  .sidebar .conn-block{ display:none; }
+  .sidebar:not(.pinned):hover .brand .sub,
+  .sidebar.pinned .brand .sub{ display:block; }
+  .sidebar:not(.pinned):hover .nav-item span:not(.num),
+  .sidebar.pinned .nav-item span:not(.num){ display:inline; }
+  .sidebar:not(.pinned):hover .conn-block,
+  .sidebar.pinned .conn-block{ display:block; }
+
+  .sidebar .brand{ padding:22px 0 16px; text-align:center; transition:padding .15s; }
+  .sidebar:not(.pinned):hover .brand,
+  .sidebar.pinned .brand{ padding:22px 20px 16px; text-align:left; }
+  .sidebar .brand .mark{ font-size:0; }
+  .sidebar:not(.pinned):hover .brand .mark,
+  .sidebar.pinned .brand .mark{ font-size:15px; }
+  .sidebar .brand .mark .bolt{ font-size:18px; }
+
+  .sidebar .nav-item{ justify-content:center; padding:10px 6px; }
+  .sidebar:not(.pinned):hover .nav-item,
+  .sidebar.pinned .nav-item{ justify-content:flex-start; padding:10px 12px; }
+  .sidebar .nav-item .num{ display:none; }
+  .sidebar:not(.pinned):hover .nav-item .num,
+  .sidebar.pinned .nav-item .num{ display:inline; }
+
+  .sidebar .sidebar-foot{ justify-content:center; }
+  .sidebar:not(.pinned):hover .sidebar-foot,
+  .sidebar.pinned .sidebar-foot{ justify-content:space-between; }
+
+  .main{ margin-left:64px; } /* espace réservé fixe : le survol ne pousse pas le contenu */
+  body.sidebar-pinned .main{ margin-left:230px; }
+
+  .menu-toggle{ display:none; } /* inutile : la sidebar est toujours accessible */
+  .backdrop{ display:none !important; } /* jamais de fond assombri sur desktop */
 }
 
 .topbar{
@@ -325,9 +354,21 @@ tbody tr:hover{ background:var(--bg-panel-2); }
 .mono{ font-family:var(--font-mono); }
 
 /* ============================================================
-   RESPONSIVE / MOBILE — usage en atelier depuis un téléphone
+   TABLEAUX — défilement horizontal universel
+   Chaque tableau de l'appli est enveloppé dans .table-scroll (voir JS).
+   C'est ce conteneur, et non le <table> lui-même, qui gère le scroll :
+   plus fiable qu'un display:block sur <table> selon les navigateurs.
+   Actif à toutes les tailles d'écran (sans effet si le contenu tient
+   déjà dans la largeur disponible).
    ============================================================ */
-.table-scroll{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.table-scroll{
+  overflow-x:auto; -webkit-overflow-scrolling:touch;
+  touch-action: pan-x pan-y; /* autorise explicitement le balayage horizontal tactile */
+}
+/* Pas de min-width forcée : les petits tableaux (2 colonnes) doivent
+   pouvoir passer le texte à la ligne normalement. Les tableaux larges
+   (en-têtes en white-space:nowrap) débordent naturellement et deviennent
+   défilables grâce au conteneur .table-scroll ci-dessus. */
 
 /* ============================================================
    RESPONSIVE / MOBILE — usage en atelier depuis un téléphone
@@ -335,19 +376,10 @@ tbody tr:hover{ background:var(--bg-panel-2); }
    identique quelle que soit l'orientation. Ici on ne touche qu'à la
    densité d'affichage du contenu sur petit écran.
    ============================================================ */
-.table-scroll{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
-
 @media (max-width: 899px){
-  .sidebar{ width:260px; } /* plein tiroir même en mode "collapsed" desktop, sur mobile on veut les libellés */
-  .sidebar.collapsed{ width:260px; }
-  .sidebar.collapsed .brand .sub,
-  .sidebar.collapsed .nav-item span:not(.num),
-  .sidebar.collapsed .conn-block{ display:block; }
-  .sidebar.collapsed .nav-item{ justify-content:flex-start; padding:10px 12px; }
-  .sidebar.collapsed .nav-item .num{ display:inline; }
-  .sidebar.collapsed .brand{ padding:22px 20px 16px; text-align:left; }
-  .sidebar.collapsed .brand .mark{ font-size:15px; }
-  .collapse-btn{ display:none; } /* pas de mode icône seule sur petit écran, uniquement ouvrir/fermer */
+  .sidebar{ width:260px; }
+  .collapse-btn{ display:none; } /* pas de mode "réduit/épinglé" sur petit écran, uniquement ouvrir/fermer le tiroir */
+  body.nav-open .sidebar{ transform:translateX(0); } /* ouverture du tiroir (fermé par défaut, cf. règle générale) */
 
   body{ font-size:15px; } /* légèrement plus grand : lisibilité en atelier */
   .topbar{ padding:0 14px; height:52px; }
@@ -358,10 +390,6 @@ tbody tr:hover{ background:var(--bg-panel-2); }
   .grid-4{ grid-template-columns:1fr 1fr; gap:10px; }
   .card{ padding:14px; }
   .kpi .value{ font-size:22px; }
-
-  /* Tableaux : on autorise le scroll horizontal plutôt que de casser la mise en page */
-  table{ min-width:640px; }
-  .card > table, .section-body > table, .tp-card > table{ display:block; overflow-x:auto; -webkit-overflow-scrolling:touch; }
 
   /* Cibles tactiles plus grandes pour une utilisation en atelier (gants, doigts mouillés...) */
   .btn{ padding:11px 16px; font-size:14px; }
@@ -530,8 +558,9 @@ function goTo(page){
   if(window.innerWidth < 900) closeDrawer();
 }
 
-/* ---------- Menu rétractable / tiroir ---------- */
+/* ---------- Menu : tiroir (mobile) + survol épinglable (desktop) ---------- */
 const sidebarEl = document.getElementById('sidebar');
+const collapseBtnEl = document.getElementById('collapseBtn');
 
 function openDrawer(){ document.body.classList.add('nav-open'); }
 function closeDrawer(){ document.body.classList.remove('nav-open'); }
@@ -540,24 +569,21 @@ function toggleDrawer(){ document.body.classList.toggle('nav-open'); }
 document.getElementById('menuToggle').addEventListener('click', toggleDrawer);
 document.getElementById('backdrop').addEventListener('click', closeDrawer);
 
-// Bouton "‹" dans la sidebar : réduit le menu en icônes seules (grand écran
-// uniquement — sur petit écran ce bouton est masqué en CSS, seul le tiroir
-// ouvrir/fermer existe).
-document.getElementById('collapseBtn').addEventListener('click', ()=>{
-  sidebarEl.classList.toggle('collapsed');
-  const collapsed = sidebarEl.classList.contains('collapsed');
-  document.getElementById('collapseBtn').textContent = collapsed ? '›' : '‹';
-  localStorage.setItem('cfa_nav_collapsed', collapsed ? '1' : '0');
-});
+// Bouton "‹/›" dans la sidebar : sur desktop, épingle le menu grand ouvert en
+// permanence (sinon il est réduit par défaut et ne s'élargit qu'au survol).
+// Masqué en CSS sur petit écran, où seul le tiroir ouvrir/fermer existe.
+function setPinned(pinned){
+  sidebarEl.classList.toggle('pinned', pinned);
+  document.body.classList.toggle('sidebar-pinned', pinned);
+  collapseBtnEl.textContent = pinned ? '‹' : '›';
+  collapseBtnEl.title = pinned ? 'Réduire le menu' : 'Épingler le menu ouvert';
+  localStorage.setItem('cfa_nav_pinned', pinned ? '1' : '0');
+}
+collapseBtnEl.addEventListener('click', ()=> setPinned(!sidebarEl.classList.contains('pinned')));
 
-// État initial : menu ouvert par défaut sur grand écran, fermé sur petit
-// écran (tiroir). Le mode "réduit" (icônes seules) est mémorisé.
+// État initial
 (function initNav(){
-  if(window.innerWidth >= 900) document.body.classList.add('nav-open');
-  if(localStorage.getItem('cfa_nav_collapsed') === '1'){
-    sidebarEl.classList.add('collapsed');
-    document.getElementById('collapseBtn').textContent = '›';
-  }
+  setPinned(localStorage.getItem('cfa_nav_pinned') === '1');
 })();
 
 /* ==========================================================================
@@ -704,18 +730,18 @@ async function renderAccueil(){
 
     <div class="section-title"><h2>Avancement par section</h2><div class="rule"></div></div>
     <div class="card" style="padding:0;">
-      <table>
+      <div class="table-scroll"><table>
         <thead><tr><th>Code</th><th>Section</th><th>Séances avec TP</th><th>Répartition</th><th>%</th><th>Coût</th></tr></thead>
         <tbody>${sectionRows || `<tr><td colspan="6" class="text-dim" style="padding:20px;">Aucune donnée</td></tr>`}</tbody>
-      </table>
+      </table></div>
     </div>
 
     <div class="section-title"><h2>Coût par type de TP</h2><div class="rule"></div></div>
     <div class="card" style="padding:0;">
-      <table>
+      <div class="table-scroll"><table>
         <thead><tr><th>Code TP</th><th>Type</th><th>Coût cumulé</th></tr></thead>
         <tbody>${tpRows || `<tr><td colspan="3" class="text-dim" style="padding:20px;">Aucune donnée</td></tr>`}</tbody>
-      </table>
+      </table></div>
     </div>
   `;
 }
@@ -791,7 +817,7 @@ async function renderSuivi(){
           <span class="stats">${done} / ${sec.rows.length} séances avec TP · ${fmtEUR(sectionCost(sec))}</span>
         </div>
         <div class="section-body" id="body-${si}">
-          <table>
+          <div class="table-scroll"><table>
             <thead>
               <tr>
                 <th>N°</th><th>Sem.</th><th>Dates</th><th>Module</th><th>Eff. réf.</th>
@@ -799,7 +825,7 @@ async function renderSuivi(){
               </tr>
             </thead>
             <tbody>${rowsHtml}</tbody>
-          </table>
+          </table></div>
         </div>
       </div>`;
   }).join('');
@@ -890,10 +916,10 @@ async function renderNomenclature(){
           </div>
           <span class="total">${fmtEUR(tp.total)} / apprenant</span>
         </div>
-        <table>
+        <div class="table-scroll"><table>
           <thead><tr><th>Désignation</th><th>Type</th><th>Qté</th><th>Unitaire/TP</th><th>Prix/TP</th><th></th></tr></thead>
           <tbody>${rows || `<tr><td colspan="6" class="text-dim" style="padding:14px;">Aucun composant</td></tr>`}</tbody>
-        </table>
+        </table></div>
         <div style="padding:10px 16px;border-top:1px solid var(--line);">
           <button class="btn btn-sm btn-ghost" onclick="openAddComponent('${escapeHtml(tp.numero)}')">+ Ajouter un composant</button>
         </div>
@@ -1046,19 +1072,19 @@ async function renderCatalogue(){
     <div class="grid grid-2" style="margin-bottom:26px;">
       <div class="card">
         <h4 style="margin-bottom:12px;font-size:13px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;">Paramètres annuels</h4>
-        <table>
+        <div class="table-scroll"><table>
           <tbody>
             ${d.params.map(p=>`<tr><td>${escapeHtml(p.label)}</td><td class="num-cell" style="font-weight:600;">${escapeHtml(String(p.valeur))}</td></tr>`).join('')}
           </tbody>
-        </table>
+        </table></div>
       </div>
       <div class="card">
         <h4 style="margin-bottom:12px;font-size:13px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;">Légende des catégories</h4>
-        <table>
+        <div class="table-scroll"><table>
           <tbody>
             ${d.legende.map(l=>`<tr><td class="mono" style="color:var(--copper);">${escapeHtml(l.code)}</td><td>${escapeHtml(l.categorie)}</td></tr>`).join('')}
           </tbody>
-        </table>
+        </table></div>
       </div>
     </div>
 
@@ -1070,7 +1096,7 @@ async function renderCatalogue(){
     </div>
 
     <div class="card" style="padding:0;">
-      <table>
+      <div class="table-scroll"><table>
         <thead>
           <tr>
             <th>Désignation</th><th>Catégorie</th><th>Unité</th><th>Référence</th>
@@ -1078,7 +1104,7 @@ async function renderCatalogue(){
           </tr>
         </thead>
         <tbody id="catalogueBody"></tbody>
-      </table>
+      </table></div>
     </div>
   `;
 
