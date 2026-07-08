@@ -71,7 +71,6 @@ html, body{ overflow-x:hidden; } /* garde-fou : jamais de scroll horizontal invo
   position:fixed; top:0; left:0; height:100vh; z-index:30;
   transform:translateX(-100%); /* état par défaut (mobile) : tiroir fermé */
   transition:transform .2s ease, width .15s ease;
-  overflow:hidden;
 }
 
 .backdrop{
@@ -188,9 +187,7 @@ html, body{ overflow-x:hidden; } /* garde-fou : jamais de scroll horizontal invo
   .sidebar .nav-item{ justify-content:center; padding:10px 6px; }
   .sidebar:not(.pinned):hover .nav-item,
   .sidebar.pinned .nav-item{ justify-content:flex-start; padding:10px 12px; }
-  .sidebar .nav-item .num{ display:none; }
-  .sidebar:not(.pinned):hover .nav-item .num,
-  .sidebar.pinned .nav-item .num{ display:inline; }
+  .sidebar .nav-item .num{ display:inline; } /* toujours visible en mode réduit : sert d'icône */
 
   .sidebar .sidebar-foot{ justify-content:center; }
   .sidebar:not(.pinned):hover .sidebar-foot,
@@ -998,8 +995,10 @@ async function fillCatalogueDatalist(){
 }
 
 let newTPComponents = [];
+let newTPHeader = { numero:'', intitule:'' };
 function openCreateTP(){
   newTPComponents = [{ designation:'', quantite:1 }];
+  newTPHeader = { numero:'', intitule:'' };
   renderCreateTPModal();
   fillCatalogueDatalist();
 }
@@ -1017,11 +1016,11 @@ function renderCreateTPModal(){
     <h3>Créer un nouveau TP</h3>
     <div class="field">
       <label>Numéro de TP</label>
-      <input type="text" id="mNumero" placeholder="Ex : TP 10">
+      <input type="text" id="mNumero" placeholder="Ex : TP 10" value="${escapeHtml(newTPHeader.numero)}" oninput="newTPHeader.numero=this.value">
     </div>
     <div class="field">
       <label>Intitulé du TP</label>
-      <input type="text" id="mIntitule" placeholder="Ex : Maquette domotique">
+      <input type="text" id="mIntitule" placeholder="Ex : Maquette domotique" value="${escapeHtml(newTPHeader.intitule)}" oninput="newTPHeader.intitule=this.value">
     </div>
     <div class="field">
       <label>Composants</label>
@@ -1040,12 +1039,23 @@ function renderCreateTPModal(){
     if(cat){ document.getElementById('catalogueList2').innerHTML = cat.items.map(i=>`<option value="${escapeHtml(i.designation)}">`).join(''); }
   }, 100);
 }
-function addNewTPRow(){ newTPComponents.push({designation:'',quantite:1}); renderCreateTPModal(); }
-function removeNewTPRow(i){ newTPComponents.splice(i,1); if(!newTPComponents.length) newTPComponents.push({designation:'',quantite:1}); renderCreateTPModal(); }
+// Chaque ajout/suppression de ligne reconstruit la fenêtre : on capture
+// d'abord les valeurs actuellement saisies dans newTPHeader (au cas où
+// l'événement "input" n'aurait pas encore eu le temps de se déclencher),
+// pour ne jamais perdre le numéro / intitulé déjà renseignés.
+function captureHeaderFields(){
+  const nEl = document.getElementById('mNumero');
+  const iEl = document.getElementById('mIntitule');
+  if(nEl) newTPHeader.numero = nEl.value;
+  if(iEl) newTPHeader.intitule = iEl.value;
+}
+function addNewTPRow(){ captureHeaderFields(); newTPComponents.push({designation:'',quantite:1}); renderCreateTPModal(); }
+function removeNewTPRow(i){ captureHeaderFields(); newTPComponents.splice(i,1); if(!newTPComponents.length) newTPComponents.push({designation:'',quantite:1}); renderCreateTPModal(); }
 
 async function submitCreateTP(){
-  const numero = document.getElementById('mNumero').value.trim();
-  const intitule = document.getElementById('mIntitule').value.trim();
+  captureHeaderFields();
+  const numero = newTPHeader.numero.trim();
+  const intitule = newTPHeader.intitule.trim();
   const composants = newTPComponents.filter(c=>c.designation && c.quantite);
   if(!numero || !intitule){ toast('Numéro et intitulé requis', 'err'); return; }
   if(!composants.length){ toast('Au moins un composant requis', 'err'); return; }
