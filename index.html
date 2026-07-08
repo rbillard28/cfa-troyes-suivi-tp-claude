@@ -102,16 +102,25 @@ input, select, textarea{font-family:var(--font-body); color:var(--text);}
 
 .sidebar-foot{
   padding:14px 16px; border-top:1px solid var(--line);
-  display:flex; align-items:center; justify-content:space-between;
+  display:flex; align-items:flex-start; justify-content:space-between; gap:8px;
 }
-.led{ width:8px; height:8px; border-radius:50%; display:inline-block; }
+.conn-block{ min-width:0; }
+.conn-status{ display:flex; align-items:center; gap:7px; }
+.led{ width:8px; height:8px; border-radius:50%; display:inline-block; flex-shrink:0; }
 .led.on{ background:var(--led-green); box-shadow:0 0 6px var(--led-green); }
 .led.off{ background:var(--led-red); box-shadow:0 0 6px var(--led-red); }
-.status-txt{ font-family:var(--font-mono); font-size:10.5px; color:var(--text-dim); }
+.status-txt{ font-family:var(--font-mono); font-size:10.5px; color:var(--text-dim); letter-spacing:.03em; }
+.conn-sub{ font-size:11px; color:var(--text-muted); font-weight:600; margin:3px 0 4px 15px; }
+.sheet-link{
+  display:inline-block; margin-left:15px;
+  font-size:11px; color:var(--copper); text-decoration:none; font-weight:600;
+}
+.sheet-link:hover{ text-decoration:underline; }
+.sheet-link.disabled{ color:var(--text-dim); pointer-events:none; }
 .gear-btn{
   background:none; border:1px solid var(--line); color:var(--text-muted);
   width:28px; height:28px; border-radius:7px; font-size:14px;
-  display:flex; align-items:center; justify-content:center;
+  display:flex; align-items:center; justify-content:center; flex-shrink:0;
 }
 .gear-btn:hover{ border-color:var(--copper); color:var(--copper); }
 
@@ -126,6 +135,11 @@ input, select, textarea{font-family:var(--font-body); color:var(--text);}
 }
 .topbar h1{ font-size:16.5px; font-weight:600; }
 .topbar .crumb{ font-family:var(--font-mono); font-size:11px; color:var(--text-dim); }
+.topbar-sheet-link{
+  display:none; align-items:center; justify-content:center;
+  width:34px; height:34px; border-radius:8px; font-size:16px;
+  border:1px solid var(--line); text-decoration:none; flex-shrink:0;
+}
 .content{ padding:26px 28px 60px; max-width:1320px; width:100%; margin:0 auto; }
 
 /* ---------- primitives ---------- */
@@ -299,6 +313,7 @@ tbody tr:hover{ background:var(--bg-panel-2); }
   .topbar{ padding:0 16px; height:52px; }
   .topbar .crumb{ display:none; }
   .topbar h1{ font-size:15px; }
+  .topbar-sheet-link{ display:flex; }
   .content{ padding:16px 14px 30px; }
 
   .grid-4{ grid-template-columns:1fr 1fr; gap:10px; }
@@ -343,9 +358,13 @@ tbody tr:hover{ background:var(--bg-panel-2); }
       <button class="nav-item" data-page="catalogue"><span class="num">04</span> Catalogue matériel</button>
     </nav>
     <div class="sidebar-foot">
-      <div style="display:flex;align-items:center;gap:7px;">
-        <span class="led off" id="connLed"></span>
-        <span class="status-txt" id="connTxt">NON CONNECTÉ</span>
+      <div class="conn-block">
+        <div class="conn-status">
+          <span class="led off" id="connLed"></span>
+          <span class="status-txt" id="connTxt">NON CONNECTÉ</span>
+        </div>
+        <div class="conn-sub">Google Sheet</div>
+        <a href="#" target="_blank" rel="noopener" class="sheet-link" id="sheetLink">Ouvrir le classeur ↗</a>
       </div>
       <button class="gear-btn" id="settingsBtn" title="Paramètres de connexion">⚙</button>
     </div>
@@ -356,6 +375,7 @@ tbody tr:hover{ background:var(--bg-panel-2); }
     <div class="topbar">
       <h1 id="pageTitle">Accueil</h1>
       <span class="crumb" id="pageCrumb">SUIVI-TP / ACCUEIL</span>
+      <a href="#" target="_blank" rel="noopener" class="topbar-sheet-link" id="topbarSheetLink" title="Ouvrir le Google Sheet">📊</a>
     </div>
     <div class="content" id="content">
       <div class="loader"></div>
@@ -394,7 +414,12 @@ tbody tr:hover{ background:var(--bg-panel-2); }
 // l'étape "Déployer > Nouveau déploiement > Application Web".
 // Une fois cette valeur renseignée, l'icône ⚙ disparaît de l'interface :
 // plus personne n'a besoin (ni ne peut) saisir une URL différente.
-const HARD_CODED_API_URL = "https://script.google.com/macros/s/AKfycbxVtmt23CkYvRgqW7avZ--dSKuFjKa33xjxGVVWURDY4AWwSdr8ydYvv5U8bBbpiVWh/exec";
+const HARD_CODED_API_URL = "https://script.google.com/macros/s/AKfycbxuJ-eLmJoxv4Q7km-mJGYXnyOPdXGOswehiFgHO4Xt0vXqiPjL0GMrLa0aKsQfObxv/exec";
+
+// Lien direct vers le Google Sheet (bouton "Ouvrir le classeur ↗" en bas de
+// la barre latérale). Utile pour une correction ponctuelle directement dans
+// le Sheet, ou pour vérifier une formule.
+const SHEET_URL = "https://docs.google.com/spreadsheets/d/145sQjhaUKe7ig8Wrx1YXqB19gwe_IyUn41aeCoeZwmg/edit?gid=1175086447#gid=1175086447&fvid=1957555810";
 
 const state = {
   apiUrl: HARD_CODED_API_URL || localStorage.getItem('cfa_api_url') || '',
@@ -483,6 +508,19 @@ document.getElementById('settingsSave').addEventListener('click', async ()=>{
 async function checkConnection(){
   const led = document.getElementById('connLed');
   const txt = document.getElementById('connTxt');
+  const link = document.getElementById('sheetLink');
+  const topbarLink = document.getElementById('topbarSheetLink');
+
+  if(SHEET_URL){
+    link.href = SHEET_URL;
+    link.classList.remove('disabled');
+    topbarLink.href = SHEET_URL;
+  } else {
+    link.classList.add('disabled');
+    link.textContent = 'Aucun lien configuré';
+    topbarLink.style.display = 'none';
+  }
+
   if(!state.apiUrl){
     led.className = 'led off'; txt.textContent = 'NON CONNECTÉ';
     return false;
