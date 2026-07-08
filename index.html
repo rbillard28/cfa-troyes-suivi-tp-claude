@@ -105,14 +105,13 @@ input, select, textarea{font-family:var(--font-body); color:var(--text);}
   display:flex; align-items:flex-start; justify-content:space-between; gap:8px;
 }
 .conn-block{ min-width:0; }
-.conn-status{ display:flex; align-items:center; gap:7px; }
+.conn-status{ display:flex; align-items:center; gap:7px; white-space:nowrap; }
 .led{ width:8px; height:8px; border-radius:50%; display:inline-block; flex-shrink:0; }
 .led.on{ background:var(--led-green); box-shadow:0 0 6px var(--led-green); }
 .led.off{ background:var(--led-red); box-shadow:0 0 6px var(--led-red); }
-.status-txt{ font-family:var(--font-mono); font-size:10.5px; color:var(--text-dim); letter-spacing:.03em; }
-.conn-sub{ font-size:11px; color:var(--text-muted); font-weight:600; margin:3px 0 4px 15px; }
+.status-txt{ font-family:var(--font-mono); font-size:10.5px; color:var(--text-dim); letter-spacing:.03em; white-space:nowrap; }
 .sheet-link{
-  display:inline-block; margin-left:15px;
+  display:inline-block; margin:5px 0 0 15px;
   font-size:11px; color:var(--copper); text-decoration:none; font-weight:600;
 }
 .sheet-link:hover{ text-decoration:underline; }
@@ -135,11 +134,12 @@ input, select, textarea{font-family:var(--font-body); color:var(--text);}
 }
 .topbar h1{ font-size:16.5px; font-weight:600; }
 .topbar .crumb{ font-family:var(--font-mono); font-size:11px; color:var(--text-dim); }
-.topbar-sheet-link{
-  display:none; align-items:center; justify-content:center;
-  width:34px; height:34px; border-radius:8px; font-size:16px;
-  border:1px solid var(--line); text-decoration:none; flex-shrink:0;
+.mobile-conn-bar{
+  display:none; align-items:center; gap:8px;
+  padding:8px 16px; border-bottom:1px solid var(--line);
+  background:var(--bg-panel);
 }
+.mobile-conn-bar .sheet-link{ margin:0 0 0 auto; }
 .content{ padding:26px 28px 60px; max-width:1320px; width:100%; margin:0 auto; }
 
 /* ---------- primitives ---------- */
@@ -313,7 +313,7 @@ tbody tr:hover{ background:var(--bg-panel-2); }
   .topbar{ padding:0 16px; height:52px; }
   .topbar .crumb{ display:none; }
   .topbar h1{ font-size:15px; }
-  .topbar-sheet-link{ display:flex; }
+  .mobile-conn-bar{ display:flex; }
   .content{ padding:16px 14px 30px; }
 
   .grid-4{ grid-template-columns:1fr 1fr; gap:10px; }
@@ -322,7 +322,7 @@ tbody tr:hover{ background:var(--bg-panel-2); }
 
   /* Tableaux : on autorise le scroll horizontal plutôt que de casser la mise en page */
   table{ min-width:640px; }
-  .card > table, .section-body > table{ display:block; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .card > table, .section-body > table, .tp-card > table{ display:block; overflow-x:auto; -webkit-overflow-scrolling:touch; }
 
   /* Cibles tactiles plus grandes pour une utilisation en atelier (gants, doigts mouillés...) */
   .btn{ padding:11px 16px; font-size:14px; }
@@ -361,9 +361,8 @@ tbody tr:hover{ background:var(--bg-panel-2); }
       <div class="conn-block">
         <div class="conn-status">
           <span class="led off" id="connLed"></span>
-          <span class="status-txt" id="connTxt">NON CONNECTÉ</span>
+          <span class="status-txt" id="connTxt">Non connecté</span>
         </div>
-        <div class="conn-sub">Google Sheet</div>
         <a href="#" target="_blank" rel="noopener" class="sheet-link" id="sheetLink">Ouvrir le classeur ↗</a>
       </div>
       <button class="gear-btn" id="settingsBtn" title="Paramètres de connexion">⚙</button>
@@ -375,7 +374,11 @@ tbody tr:hover{ background:var(--bg-panel-2); }
     <div class="topbar">
       <h1 id="pageTitle">Accueil</h1>
       <span class="crumb" id="pageCrumb">SUIVI-TP / ACCUEIL</span>
-      <a href="#" target="_blank" rel="noopener" class="topbar-sheet-link" id="topbarSheetLink" title="Ouvrir le Google Sheet">📊</a>
+    </div>
+    <div class="mobile-conn-bar" id="mobileConnBar">
+      <span class="led off" id="connLedM"></span>
+      <span class="status-txt" id="connTxtM">Non connecté</span>
+      <a href="#" target="_blank" rel="noopener" class="sheet-link" id="sheetLinkM">Ouvrir le classeur ↗</a>
     </div>
     <div class="content" id="content">
       <div class="loader"></div>
@@ -506,31 +509,38 @@ document.getElementById('settingsSave').addEventListener('click', async ()=>{
 });
 
 async function checkConnection(){
-  const led = document.getElementById('connLed');
-  const txt = document.getElementById('connTxt');
-  const link = document.getElementById('sheetLink');
-  const topbarLink = document.getElementById('topbarSheetLink');
+  // Deux jeux d'éléments : le bloc de la barre latérale (desktop) et la
+  // barre compacte affichée sous le bandeau supérieur (mobile). Les deux
+  // sont toujours tenus à jour ensemble.
+  const leds  = [document.getElementById('connLed'), document.getElementById('connLedM')];
+  const txts  = [document.getElementById('connTxt'), document.getElementById('connTxtM')];
+  const links = [document.getElementById('sheetLink'), document.getElementById('sheetLinkM')];
 
-  if(SHEET_URL){
-    link.href = SHEET_URL;
-    link.classList.remove('disabled');
-    topbarLink.href = SHEET_URL;
-  } else {
-    link.classList.add('disabled');
-    link.textContent = 'Aucun lien configuré';
-    topbarLink.style.display = 'none';
+  links.forEach(link=>{
+    if(SHEET_URL){
+      link.href = SHEET_URL;
+      link.classList.remove('disabled');
+    } else {
+      link.classList.add('disabled');
+      link.textContent = 'Aucun lien configuré';
+    }
+  });
+
+  function setStatus(ledState, label){
+    leds.forEach(l => l.className = 'led ' + ledState);
+    txts.forEach(t => t.textContent = label);
   }
 
   if(!state.apiUrl){
-    led.className = 'led off'; txt.textContent = 'NON CONNECTÉ';
+    setStatus('off', 'Non connecté');
     return false;
   }
   try{
     await apiGet('dashboard');
-    led.className = 'led on'; txt.textContent = 'CONNECTÉ';
+    setStatus('on', 'Connecté à Google Sheet');
     return true;
   }catch(err){
-    led.className = 'led off'; txt.textContent = 'ERREUR API';
+    setStatus('off', 'Erreur — Google Sheet');
     return false;
   }
 }
