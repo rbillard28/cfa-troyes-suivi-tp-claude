@@ -480,7 +480,7 @@ tbody tr:hover{ background:var(--bg-panel-2); }
 // l'étape "Déployer > Nouveau déploiement > Application Web".
 // Une fois cette valeur renseignée, l'icône ⚙ disparaît de l'interface :
 // plus personne n'a besoin (ni ne peut) saisir une URL différente.
-const HARD_CODED_API_URL = "https://script.google.com/macros/s/AKfycbyGwrA6lV4plRDvTBE5aCJwmWV8EXSO2W_oz_3GIS_GU4Xv98x3YC37oam_mzMAeXlp/exec";
+const HARD_CODED_API_URL = "https://script.google.com/macros/s/AKfycbz5HHb1NnyhvFGZS6xDCK9XicBwEDwpSS6dGiA60zVsxxTQemAwG73gaii_BLkaarUu/exec";
 
 // Lien direct vers le Google Sheet (bouton "Ouvrir le classeur ↗" en bas de
 // la barre latérale). Utile pour une correction ponctuelle directement dans
@@ -914,10 +914,11 @@ async function renderNomenclature(){
           <div class="title">
             <span class="tpnum">${escapeHtml(tp.numero)}</span>
             <span>${escapeHtml(tp.intitule||'')}</span>
+            ${tp.typeTP ? `<span class="badge type-reut">${escapeHtml(tp.typeTP)}</span>` : `<span class="badge neutral">Type non défini</span>`}
           </div>
           <div style="display:flex;align-items:center;gap:10px;">
             <span class="total">${fmtEUR(tp.total)} / apprenant</span>
-            <button class="btn btn-sm btn-ghost" onclick="openEditTPHeader('${escapeHtml(tp.numero)}','${escapeHtml(tp.intitule||'')}')" title="Modifier le numéro / intitulé">Modifier</button>
+            <button class="btn btn-sm btn-ghost" onclick="openEditTPHeader('${escapeHtml(tp.numero)}','${escapeHtml(tp.intitule||'')}','${tpTypeLabelToKey_(tp.typeTP)}')" title="Modifier le numéro / intitulé / type">Modifier</button>
             <button class="btn btn-sm btn-danger" onclick="confirmDeleteTP('${escapeHtml(tp.numero)}','${escapeHtml(tp.intitule||'')}')" title="Supprimer ce TP entièrement">Supprimer le TP</button>
           </div>
         </div>
@@ -1003,10 +1004,10 @@ async function fillCatalogueDatalist(){
 }
 
 let newTPComponents = [];
-let newTPHeader = { numero:'', intitule:'' };
+let newTPHeader = { numero:'', intitule:'', typeTP:'' };
 function openCreateTP(){
   newTPComponents = [{ designation:'', quantite:1 }];
-  newTPHeader = { numero:'', intitule:'' };
+  newTPHeader = { numero:'', intitule:'', typeTP:'' };
   renderCreateTPModal();
   fillCatalogueDatalist();
 }
@@ -1031,6 +1032,13 @@ function renderCreateTPModal(){
       <input type="text" id="mIntitule" placeholder="Ex : Maquette domotique" value="${escapeHtml(newTPHeader.intitule)}" oninput="newTPHeader.intitule=this.value">
     </div>
     <div class="field">
+      <label>Type de TP</label>
+      <select id="mTypeTP" oninput="newTPHeader.typeTP=this.value">${tpTypeOptionsHtml(newTPHeader.typeTP)}</select>
+      <p class="text-dim" style="font-size:11.5px;margin:5px 0 0;">
+        Sert à calculer automatiquement le coût amorti des composants réutilisables de ce TP (nombre de TP/an selon son type).
+      </p>
+    </div>
+    <div class="field">
       <label>Composants</label>
       <datalist id="catalogueList2"></datalist>
       <div id="newTPRows">${rowsHtml}</div>
@@ -1047,6 +1055,24 @@ function renderCreateTPModal(){
     if(cat){ document.getElementById('catalogueList2').innerHTML = cat.items.map(i=>`<option value="${escapeHtml(i.designation)}">`).join(''); }
   }, 100);
 }
+
+// Liste fixe des 4 types de TP (correspond à CONFIG.TP_TYPES côté Apps Script)
+const TP_TYPE_OPTIONS = [
+  { key:'batiment',    label:'Bâtiment' },
+  { key:'indus',       label:'Indus simple' },
+  { key:'automatisme', label:'Automatisme' },
+  { key:'variateur',   label:'Variateur' }
+];
+function tpTypeOptionsHtml(selected){
+  return ['<option value="">— Non défini —</option>']
+    .concat(TP_TYPE_OPTIONS.map(t=>`<option value="${t.key}" ${t.key===selected?'selected':''}>${escapeHtml(t.label)}</option>`))
+    .join('');
+}
+function tpTypeLabelToKey_(label){
+  const found = TP_TYPE_OPTIONS.find(t=>t.label===label);
+  return found ? found.key : '';
+}
+
 // Chaque ajout/suppression de ligne reconstruit la fenêtre : on capture
 // d'abord les valeurs actuellement saisies dans newTPHeader (au cas où
 // l'événement "input" n'aurait pas encore eu le temps de se déclencher),
@@ -1054,8 +1080,10 @@ function renderCreateTPModal(){
 function captureHeaderFields(){
   const nEl = document.getElementById('mNumero');
   const iEl = document.getElementById('mIntitule');
+  const tEl = document.getElementById('mTypeTP');
   if(nEl) newTPHeader.numero = nEl.value;
   if(iEl) newTPHeader.intitule = iEl.value;
+  if(tEl) newTPHeader.typeTP = tEl.value;
 }
 function addNewTPRow(){ captureHeaderFields(); newTPComponents.push({designation:'',quantite:1}); renderCreateTPModal(); }
 function removeNewTPRow(i){ captureHeaderFields(); newTPComponents.splice(i,1); if(!newTPComponents.length) newTPComponents.push({designation:'',quantite:1}); renderCreateTPModal(); }
@@ -1064,11 +1092,12 @@ async function submitCreateTP(){
   captureHeaderFields();
   const numero = newTPHeader.numero.trim();
   const intitule = newTPHeader.intitule.trim();
+  const typeTP = newTPHeader.typeTP;
   const composants = newTPComponents.filter(c=>c.designation && c.quantite);
   if(!numero || !intitule){ toast('Numéro et intitulé requis', 'err'); return; }
   if(!composants.length){ toast('Au moins un composant requis', 'err'); return; }
   try{
-    await apiPost('createNewTP', { numero, intitule, composants });
+    await apiPost('createNewTP', { numero, intitule, typeTP, composants });
     closeModal();
     toast('Nouveau TP créé', 'ok');
     await renderNomenclature();
@@ -1076,7 +1105,7 @@ async function submitCreateTP(){
 }
 
 /* ---------- Modifier / supprimer un TP complet ---------- */
-function openEditTPHeader(oldNumero, oldIntitule){
+function openEditTPHeader(oldNumero, oldIntitule, currentTypeKey){
   openModal(`
     <h3>Modifier le TP ${escapeHtml(oldNumero)}</h3>
     <p class="text-dim" style="font-size:12.5px;margin-top:-8px;margin-bottom:16px;">
@@ -1092,6 +1121,14 @@ function openEditTPHeader(oldNumero, oldIntitule){
       <label>Intitulé du TP</label>
       <input type="text" id="mEditIntitule" value="${escapeHtml(oldIntitule)}">
     </div>
+    <div class="field">
+      <label>Type de TP</label>
+      <select id="mEditTypeTP">${tpTypeOptionsHtml(currentTypeKey||'')}</select>
+      <p class="text-dim" style="font-size:11.5px;margin:5px 0 0;">
+        Changer le type recalcule automatiquement l'amortissement des
+        composants réutilisables de ce TP.
+      </p>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
       <button class="btn btn-copper" id="mSubmitEditTP">Enregistrer</button>
@@ -1100,9 +1137,10 @@ function openEditTPHeader(oldNumero, oldIntitule){
   document.getElementById('mSubmitEditTP').addEventListener('click', async ()=>{
     const numero = document.getElementById('mEditNumero').value.trim();
     const intitule = document.getElementById('mEditIntitule').value.trim();
+    const typeTP = document.getElementById('mEditTypeTP').value;
     if(!numero || !intitule){ toast('Numéro et intitulé requis', 'err'); return; }
     try{
-      await apiPost('updateTPHeader', { oldNumero, numero, intitule });
+      await apiPost('updateTPHeader', { oldNumero, numero, intitule, typeTP });
       closeModal();
       toast('TP mis à jour', 'ok');
       await renderNomenclature();
@@ -1199,9 +1237,9 @@ function renderCatalogueRows(items){
   body.innerHTML = items.map(i=>{
     const isReutilisable = typeof i.dureeVie === 'number';
     const typesBadges = (i.tpTypes||[]).map(k=>`<span class="badge type-reut" style="margin-right:3px;">${escapeHtml(typeLabels[k]||k)}</span>`).join('');
-    const amortCell = isReutilisable
+    const typeTpCell = isReutilisable
       ? (i.tpTypes && i.tpTypes.length
-          ? `${typesBadges}<div class="text-dim" style="font-size:11px;margin-top:3px;">${i.nbTotalTP||'?'} TP au total</div>`
+          ? `${typesBadges}${i.nbTotalTP ? `<div class="text-dim" style="font-size:11px;margin-top:3px;">${escapeHtml(String(i.nbTotalTP))} TP au total</div>` : ''}`
           : `<span class="text-dim" style="font-size:12px;">⚠ aucun type de TP défini</span>`)
       : `<span class="text-dim">—</span>`;
     return `
@@ -1213,7 +1251,7 @@ function renderCatalogueRows(items){
       <td class="num-cell">${i.prixReduit ? fmtEUR(i.prixReduit) : '—'}</td>
       <td class="num-cell">${i.prixComplet ? fmtEUR(i.prixComplet) : '—'}</td>
       <td class="num-cell">${escapeHtml(String(i.dureeVie||''))}</td>
-      <td style="min-width:150px;">${amortCell}</td>
+      <td style="min-width:150px;">${typeTpCell}</td>
       <td class="num-cell" style="font-weight:600;">${i.prixParTP ? fmtEUR(i.prixParTP) : '—'}</td>
       <td style="white-space:nowrap;">
         <button class="btn btn-sm btn-ghost" onclick="openEditCatalogueItem(${i.rowNumber})">Modifier</button>
@@ -1280,13 +1318,10 @@ async function deleteCatalogueItem(rowNumber){
 
 function catalogueFormFields(item={}){
   const isReutilisable = typeof item.dureeVie === 'number';
-  const tpTypes = state.data.catalogueCache ? state.data.catalogueCache.tpTypes : [];
-  const selected = item.tpTypes || [];
-  const checkboxesHtml = tpTypes.map(t=>`
-    <label style="display:flex;align-items:center;gap:8px;font-weight:400;text-transform:none;letter-spacing:0;font-size:13px;color:var(--text);margin-bottom:7px;cursor:pointer;">
-      <input type="checkbox" class="tp-type-cb" value="${t.key}" ${selected.indexOf(t.key)!==-1?'checked':''} style="width:auto;">
-      ${escapeHtml(t.label)} <span class="text-dim mono" style="font-size:11px;">(${escapeHtml(String(t.valeurAnnuelle))}/an)</span>
-    </label>`).join('');
+  const typeLabels = {}; (state.data.catalogueCache ? state.data.catalogueCache.tpTypes : []).forEach(t=> typeLabels[t.key]=t.label);
+  const currentTypesHtml = (item.tpTypes||[]).length
+    ? (item.tpTypes||[]).map(k=>`<span class="badge type-reut" style="margin-right:4px;">${escapeHtml(typeLabels[k]||k)}</span>`).join('')
+    : `<span class="text-dim" style="font-size:12.5px;">Aucun pour l'instant — associez ce composant à un TP depuis la page Nomenclature.</span>`;
 
   return `
     <div class="field"><label>Désignation</label><input type="text" id="fDesignation" value="${escapeHtml(item.designation||'')}"></div>
@@ -1306,10 +1341,10 @@ function catalogueFormFields(item={}){
     <div class="field" id="tpTypesBlock" style="${isReutilisable ? '' : 'display:none;'} background:var(--bg-panel-2);border:1px solid var(--line);border-radius:8px;padding:12px 14px;">
       <label style="margin-bottom:9px;">Type(s) de TP utilisant ce matériel</label>
       <p class="text-dim" style="font-size:11.5px;margin:0 0 9px;">
-        Le nombre total de TP (et donc le coût amorti par TP) est calculé automatiquement :
-        somme des TP/an cochés × durée de vie.
+        Calculé automatiquement à partir des TP qui utilisent ce composant
+        (page Nomenclature TP → type de chaque TP). Rien à cocher ici.
       </p>
-      ${checkboxesHtml}
+      ${currentTypesHtml}
     </div>
   `;
 }
@@ -1324,8 +1359,6 @@ function bindCatalogueFormEvents(){
 }
 
 function readCatalogueForm(){
-  const dureeVie = document.getElementById('fDureeVie').value.trim();
-  const tpTypes = Array.from(document.querySelectorAll('.tp-type-cb:checked')).map(cb=>cb.value);
   return {
     designation: document.getElementById('fDesignation').value.trim(),
     categorie: document.getElementById('fCategorie').value.trim(),
@@ -1333,8 +1366,8 @@ function readCatalogueForm(){
     reference: document.getElementById('fReference').value.trim(),
     prixReduit: document.getElementById('fPrixReduit').value,
     prixComplet: document.getElementById('fPrixComplet').value,
-    dureeVie: dureeVie,
-    tpTypes: dureeVie ? tpTypes : []
+    dureeVie: document.getElementById('fDureeVie').value.trim()
+    // tpTypes n'est plus envoyé : calculé côté serveur à partir de l'usage réel.
   };
 }
 
