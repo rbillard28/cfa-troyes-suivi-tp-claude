@@ -480,7 +480,7 @@ tbody tr:hover{ background:var(--bg-panel-2); }
 // l'étape "Déployer > Nouveau déploiement > Application Web".
 // Une fois cette valeur renseignée, l'icône ⚙ disparaît de l'interface :
 // plus personne n'a besoin (ni ne peut) saisir une URL différente.
-const HARD_CODED_API_URL = "https://script.google.com/macros/s/AKfycbxZEu5eD28HVd-mjnN68bhM85Ak5_b0_d8Uh4uWQtZq7T31wcgb24wV_VV63wRzO038/exec";
+const HARD_CODED_API_URL = "https://script.google.com/macros/s/AKfycbyEMfKd2V0ek-nximJ9T0XVnR8ggK0hlmQEO6T3uTxtlE0OHbuTMV0OKN2g53o7qFyg/exec";
 
 // Lien direct vers le Google Sheet (bouton "Ouvrir le classeur ↗" en bas de
 // la barre latérale). Utile pour une correction ponctuelle directement dans
@@ -501,7 +501,11 @@ const state = {
    ========================================================================== */
 async function apiGet(action){
   if(!state.apiUrl) throw new Error('API non configurée');
-  const res = await fetch(state.apiUrl + '?action=' + encodeURIComponent(action));
+  // Anti-cache : les Web Apps Apps Script peuvent voir leurs requêtes GET
+  // mises en cache (navigateur ou CDN) si l'URL est identique à chaque
+  // appel. Le paramètre horodaté force une URL unique à chaque lecture.
+  const url = state.apiUrl + '?action=' + encodeURIComponent(action) + '&_=' + Date.now();
+  const res = await fetch(url, { cache:'no-store' });
   const json = await res.json();
   if(!json.ok) throw new Error(json.error || 'Erreur API');
   return json.data;
@@ -911,7 +915,11 @@ async function renderNomenclature(){
             <span class="tpnum">${escapeHtml(tp.numero)}</span>
             <span>${escapeHtml(tp.intitule||'')}</span>
           </div>
-          <span class="total">${fmtEUR(tp.total)} / apprenant</span>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span class="total">${fmtEUR(tp.total)} / apprenant</span>
+            <button class="btn btn-sm btn-ghost" onclick="openEditTPHeader('${escapeHtml(tp.numero)}','${escapeHtml(tp.intitule||'')}')" title="Modifier le numéro / intitulé">Modifier</button>
+            <button class="btn btn-sm btn-danger" onclick="confirmDeleteTP('${escapeHtml(tp.numero)}','${escapeHtml(tp.intitule||'')}')" title="Supprimer ce TP entièrement">Supprimer le TP</button>
+          </div>
         </div>
         <div class="table-scroll"><table>
           <thead><tr><th>Désignation</th><th>Type</th><th>Qté</th><th>Unitaire/TP</th><th>Prix/TP</th><th></th></tr></thead>
@@ -1063,6 +1071,57 @@ async function submitCreateTP(){
     await apiPost('createNewTP', { numero, intitule, composants });
     closeModal();
     toast('Nouveau TP créé', 'ok');
+    await renderNomenclature();
+  }catch(err){ toast('Erreur : '+err.message, 'err'); }
+}
+
+/* ---------- Modifier / supprimer un TP complet ---------- */
+function openEditTPHeader(oldNumero, oldIntitule){
+  openModal(`
+    <h3>Modifier le TP ${escapeHtml(oldNumero)}</h3>
+    <p class="text-dim" style="font-size:12.5px;margin-top:-8px;margin-bottom:16px;">
+      Si vous changez le numéro, toutes les sessions du Suivi Global déjà
+      assignées à ce TP seront automatiquement mises à jour vers le nouveau
+      numéro (aucune session ne sera perdue).
+    </p>
+    <div class="field">
+      <label>Numéro de TP</label>
+      <input type="text" id="mEditNumero" value="${escapeHtml(oldNumero)}">
+    </div>
+    <div class="field">
+      <label>Intitulé du TP</label>
+      <input type="text" id="mEditIntitule" value="${escapeHtml(oldIntitule)}">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-copper" id="mSubmitEditTP">Enregistrer</button>
+    </div>
+  `);
+  document.getElementById('mSubmitEditTP').addEventListener('click', async ()=>{
+    const numero = document.getElementById('mEditNumero').value.trim();
+    const intitule = document.getElementById('mEditIntitule').value.trim();
+    if(!numero || !intitule){ toast('Numéro et intitulé requis', 'err'); return; }
+    try{
+      await apiPost('updateTPHeader', { oldNumero, numero, intitule });
+      closeModal();
+      toast('TP mis à jour', 'ok');
+      await renderNomenclature();
+    }catch(err){ toast('Erreur : '+err.message, 'err'); }
+  });
+}
+
+async function confirmDeleteTP(numero, intitule){
+  const ok = confirm(
+    `Supprimer entièrement le TP ${numero} (${intitule || 'sans intitulé'}) ?\n\n` +
+    `Tous ses composants seront supprimés de la nomenclature. Les sessions du ` +
+    `Suivi Global qui lui étaient assignées repasseront à "Aucun TP" (leur ` +
+    `historique de dates/effectifs est conservé, seul le TP sélectionné est retiré).\n\n` +
+    `Cette action est irréversible.`
+  );
+  if(!ok) return;
+  try{
+    await apiPost('deleteTP', { numero });
+    toast('TP supprimé', 'ok');
     await renderNomenclature();
   }catch(err){ toast('Erreur : '+err.message, 'err'); }
 }
