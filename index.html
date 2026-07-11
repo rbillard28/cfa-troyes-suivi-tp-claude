@@ -480,7 +480,7 @@ tbody tr:hover{ background:var(--bg-panel-2); }
 // l'étape "Déployer > Nouveau déploiement > Application Web".
 // Une fois cette valeur renseignée, l'icône ⚙ disparaît de l'interface :
 // plus personne n'a besoin (ni ne peut) saisir une URL différente.
-const HARD_CODED_API_URL = "https://script.google.com/macros/s/AKfycbxZaiuc7fV0tMCfG9ew7COm8sYuhd3Q475xSgH0oglpusQvNIpbjtNe-YRFz4y9whs/exec";
+const HARD_CODED_API_URL = "https://script.google.com/macros/s/AKfycbw2LWUU9aKOeYuFWnwsFeEj4BM5z-EDjl2k2CWobCwABXBuWyE_yeQU5MsOs87Hik-7/exec";
 
 // Lien direct vers le Google Sheet (bouton "Ouvrir le classeur ↗" en bas de
 // la barre latérale). Utile pour une correction ponctuelle directement dans
@@ -1056,12 +1056,13 @@ function renderCreateTPModal(){
   }, 100);
 }
 
-// Liste fixe des 4 types de TP (correspond à CONFIG.TP_TYPES côté Apps Script)
+// Liste fixe des types de TP (correspond à CONFIG.TP_TYPES côté Apps Script)
 const TP_TYPE_OPTIONS = [
   { key:'batiment',    label:'Bâtiment' },
   { key:'indus',       label:'Indus simple' },
   { key:'automatisme', label:'Automatisme' },
-  { key:'variateur',   label:'Variateur' }
+  { key:'variateur',   label:'Variateur' },
+  { key:'domotique',   label:'Domotique' }
 ];
 function tpTypeOptionsHtml(selected){
   return ['<option value="">— Non défini —</option>']
