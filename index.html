@@ -406,6 +406,7 @@ tbody tr:hover{ background:var(--bg-panel-2); }
   .sidebar{ width:260px; }
   .collapse-btn{ display:none; } /* pas de mode "réduit/épinglé" sur petit écran, uniquement ouvrir/fermer le tiroir */
   body.nav-open .sidebar{ transform:translateX(0); } /* ouverture du tiroir (fermé par défaut, cf. règle générale) */
+  body.nav-open .backdrop{ display:block; } /* fond sombre cliquable → ferme le tiroir */
 
   body{ font-size:15px; } /* légèrement plus grand : lisibilité en atelier */
   .topbar{ padding:0 14px; height:52px; }
