@@ -281,6 +281,35 @@ tbody tr:hover{ background:var(--bg-panel-2); }
 .badge.type-conso{ background:#3B2F1A; color:var(--copper); }
 .badge.type-reut{ background:#123A38; color:var(--teal); }
 
+/* ---------- Interrupteur Prix Réduit / Complet ---------- */
+.prix-toggle-wrap{
+  display:flex; align-items:center; gap:10px;
+  background:var(--bg-panel-2); border:1px solid var(--line);
+  border-radius:var(--radius); padding:8px 14px;
+  font-size:13px;
+}
+.prix-toggle-label{ color:var(--text-muted); font-size:12px; font-family:var(--font-mono); letter-spacing:.04em; }
+.prix-toggle-btn{
+  display:flex; align-items:center; gap:0;
+  border:1px solid var(--line); border-radius:6px; overflow:hidden;
+  background:none; padding:0;
+}
+.prix-toggle-btn button{
+  padding:5px 14px; font-size:12.5px; font-family:var(--font-mono);
+  border:none; background:none; color:var(--text-muted);
+  cursor:pointer; transition:background .15s, color .15s;
+}
+.prix-toggle-btn button.active.reduit{
+  background:var(--led-green-dim); color:var(--led-green);
+  font-weight:600;
+}
+.prix-toggle-btn button.active.complet{
+  background:#1E2A3A; color:var(--teal);
+  font-weight:600;
+}
+.prix-toggle-btn button:not(.active):hover{ background:var(--bg-panel); color:var(--text); }
+.prix-toggle-sep{ width:1px; height:20px; background:var(--line); }
+
 .pill-row{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
 .pill{
   padding:6px 12px; border-radius:20px; border:1px solid var(--line);
@@ -480,7 +509,7 @@ tbody tr:hover{ background:var(--bg-panel-2); }
 // l'étape "Déployer > Nouveau déploiement > Application Web".
 // Une fois cette valeur renseignée, l'icône ⚙ disparaît de l'interface :
 // plus personne n'a besoin (ni ne peut) saisir une URL différente.
-const HARD_CODED_API_URL = "https://script.google.com/macros/s/AKfycbwjeqz5ZOTo8VFsA1v0hMgXy859SpPDmZpSfl48pKoYcwT8TLbHBuWKdRKUkb7zGfTc/exec";
+const HARD_CODED_API_URL = "https://script.google.com/macros/s/AKfycbxlzFfzES-9hRgn-fPqXMcTALka2xw2DJKoj5C5gVgYgG1hP1xcJX4SzE1m8OLHRNEL/exec";
 
 // Lien direct vers le Google Sheet (bouton "Ouvrir le classeur ↗" en bas de
 // la barre latérale). Utile pour une correction ponctuelle directement dans
@@ -1172,6 +1201,13 @@ async function confirmDeleteTP(numero, intitule){
 async function renderCatalogue(){
   const d = await apiGet('catalogue');
   state.data.catalogueCache = d;
+  // Lire le mode prix actuel depuis le Sheet (Q7 de Parametres)
+  if(state.data.prixMode === undefined){
+    try{
+      const pm = await apiGet('getPrixMode');
+      state.data.prixMode = pm.mode || 'Complet';
+    } catch(e){ state.data.prixMode = 'Complet'; }
+  }
   const content = document.getElementById('content');
 
   const categories = ['Toutes'].concat([...new Set(d.items.map(i=>i.categorie).filter(Boolean))]);
@@ -1208,11 +1244,25 @@ async function renderCatalogue(){
       </table></div>
     </div>
 
-    <div class="flex-between" style="margin-bottom:14px;">
+    <div class="flex-between" style="margin-bottom:14px;flex-wrap:wrap;gap:10px;">
       <div class="pill-row" id="catFilters" style="margin-bottom:0;">
         ${categories.map(c=>`<button class="pill ${c===state.data._catFilter?'active':''}" data-cat="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join('')}
       </div>
-      <button class="btn btn-copper" onclick="openAddCatalogueItem()">+ Nouvel article</button>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div class="prix-toggle-wrap">
+          <span class="prix-toggle-label">PRIX / TP</span>
+          <div class="prix-toggle-btn" id="prixToggleBtn">
+            <button id="btnReduit"
+              class="${state.data.prixMode==='Réduit'?'active reduit':''}"
+              onclick="setPrixModeUI('Réduit')">Réduit</button>
+            <div class="prix-toggle-sep"></div>
+            <button id="btnComplet"
+              class="${state.data.prixMode!=='Réduit'?'active complet':''}"
+              onclick="setPrixModeUI('Complet')">Complet</button>
+          </div>
+        </div>
+        <button class="btn btn-copper" onclick="openAddCatalogueItem()">+ Nouvel article</button>
+      </div>
     </div>
 
     <div class="card" style="padding:0;">
@@ -1238,6 +1288,35 @@ async function renderCatalogue(){
       renderCatalogueRows(filtered);
     });
   });
+}
+
+/**
+ * Bascule l'interrupteur Réduit/Complet :
+ * 1. Écrit la valeur dans le Sheet (Q7 de Parametres) via l'API
+ * 2. Met à jour l'état local et les boutons visuellement
+ * 3. Recharge les lignes du catalogue pour afficher les nouveaux prix/TP
+ */
+async function setPrixModeUI(mode){
+  // Mise à jour visuelle immédiate (sans attendre l'API)
+  state.data.prixMode = mode;
+  const btnR = document.getElementById('btnReduit');
+  const btnC = document.getElementById('btnComplet');
+  if(btnR && btnC){
+    btnR.className = mode==='Réduit' ? 'active reduit' : '';
+    btnC.className = mode!=='Réduit' ? 'active complet' : '';
+  }
+  try{
+    await apiPost('setPrixMode', { mode });
+    // Recharger le catalogue pour refléter les nouveaux prix/TP calculés par le Sheet
+    const d = await apiGet('catalogue');
+    state.data.catalogueCache = d;
+    const filtered = state.data._catFilter && state.data._catFilter !== 'Toutes'
+      ? d.items.filter(i => i.categorie === state.data._catFilter)
+      : d.items;
+    renderCatalogueRows(filtered);
+  } catch(err){
+    console.error('setPrixMode error', err);
+  }
 }
 
 function renderCatalogueRows(items){
