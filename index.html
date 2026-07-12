@@ -281,6 +281,81 @@ tbody tr:hover{ background:var(--bg-panel-2); }
 .badge.type-conso{ background:#3B2F1A; color:var(--copper); }
 .badge.type-reut{ background:#123A38; color:var(--teal); }
 
+/* ---------- Mode Administrateur ---------- */
+.admin-btn{
+  display:flex; align-items:center; gap:6px;
+  background:none; border:1px solid var(--line);
+  border-radius:var(--radius-sm); padding:5px 10px;
+  color:var(--text-muted); font-size:12px; font-family:var(--font-mono);
+  cursor:pointer; transition:border-color .15s, color .15s, background .15s;
+  white-space:nowrap; flex-shrink:0;
+}
+.admin-btn:hover{ border-color:var(--copper); color:var(--copper); }
+.admin-btn.active{
+  border-color:var(--led-green); color:var(--led-green);
+  background:var(--led-green-dim);
+}
+.admin-btn .lock-icon{ font-size:14px; line-height:1; }
+.admin-badge{
+  display:inline-block; font-size:9.5px; font-family:var(--font-mono);
+  padding:1px 5px; border-radius:3px; letter-spacing:.04em;
+  background:var(--led-green-dim); color:var(--led-green);
+  vertical-align:middle; margin-left:4px;
+}
+
+/* Modal PIN */
+.pin-overlay{
+  display:none; position:fixed; inset:0; z-index:200;
+  background:#05080AE0; backdrop-filter:blur(4px);
+  align-items:center; justify-content:center;
+}
+.pin-overlay.open{ display:flex; }
+.pin-box{
+  background:var(--bg-panel); border:1px solid var(--line);
+  border-radius:14px; padding:32px 28px 28px;
+  width:320px; max-width:90vw;
+  display:flex; flex-direction:column; gap:18px;
+  box-shadow:0 24px 60px #00000080;
+}
+.pin-box h3{ font-size:15px; margin:0; text-align:center; }
+.pin-box p{ font-size:12.5px; color:var(--text-muted); margin:0; text-align:center; }
+.pin-dots{
+  display:flex; justify-content:center; gap:10px;
+}
+.pin-dot{
+  width:13px; height:13px; border-radius:50%;
+  border:2px solid var(--line); background:transparent;
+  transition:background .1s, border-color .1s;
+}
+.pin-dot.filled{ background:var(--copper); border-color:var(--copper); }
+.pin-dot.error{ background:var(--led-red); border-color:var(--led-red); }
+.pin-keypad{
+  display:grid; grid-template-columns:repeat(3,1fr); gap:8px;
+}
+.pin-key{
+  height:48px; border-radius:var(--radius-sm);
+  border:1px solid var(--line); background:var(--bg-panel-2);
+  color:var(--text); font-size:18px; font-family:var(--font-mono);
+  cursor:pointer; transition:background .1s, border-color .1s;
+}
+.pin-key:hover{ background:var(--line); border-color:var(--copper); }
+.pin-key:active{ background:var(--copper); color:#1a1a1a; }
+.pin-key.del{ font-size:16px; color:var(--text-muted); }
+.pin-cancel{
+  background:none; border:none; color:var(--text-dim);
+  font-size:12px; cursor:pointer; text-align:center;
+  font-family:var(--font-mono); padding:4px;
+}
+.pin-cancel:hover{ color:var(--led-red); }
+
+/* Éléments masqués en mode verrouillé */
+body:not(.admin-unlocked) .admin-only{ display:none !important; }
+body.admin-unlocked .admin-locked-hint{ display:none !important; }
+.admin-locked-hint{
+  display:inline-flex; align-items:center; gap:5px;
+  font-size:11.5px; color:var(--text-dim); font-style:italic;
+}
+
 /* ---------- Interrupteur Prix Réduit / Complet ---------- */
 .prix-toggle-wrap{
   display:flex; align-items:center; gap:10px;
@@ -472,6 +547,10 @@ tbody tr:hover{ background:var(--bg-panel-2); }
       <span class="topbar-led led off" id="topbarLed" title="Statut de connexion"></span>
       <h1 id="pageTitle">Accueil</h1>
       <span class="crumb" id="pageCrumb">SUIVI-TP / ACCUEIL</span>
+      <button class="admin-btn" id="adminLockBtn" onclick="toggleAdmin()" title="Mode administrateur">
+        <span class="lock-icon" id="adminLockIcon">🔒</span>
+        <span id="adminLockLabel">Admin</span>
+      </button>
     </div>
     <div class="content" id="content">
       <div class="loader"></div>
@@ -510,7 +589,7 @@ tbody tr:hover{ background:var(--bg-panel-2); }
 // l'étape "Déployer > Nouveau déploiement > Application Web".
 // Une fois cette valeur renseignée, l'icône ⚙ disparaît de l'interface :
 // plus personne n'a besoin (ni ne peut) saisir une URL différente.
-const HARD_CODED_API_URL = "https://script.google.com/macros/s/AKfycbxlzFfzES-9hRgn-fPqXMcTALka2xw2DJKoj5C5gVgYgG1hP1xcJX4SzE1m8OLHRNEL/exec";
+const HARD_CODED_API_URL = "https://script.google.com/macros/s/AKfycbyNO9_z6w6mpW_avXZCUaFqWAQ2I80GpwSFz3DF5xMAIFxyx9ObWOcxbe4_4pZMb8Da/exec";
 
 // Lien direct vers le Google Sheet (bouton "Ouvrir le classeur ↗" en bas de
 // la barre latérale). Utile pour une correction ponctuelle directement dans
@@ -520,7 +599,12 @@ const SHEET_URL = "https://docs.google.com/spreadsheets/d/145sQjhaUKe7ig8Wrx1YXq
 const state = {
   apiUrl: HARD_CODED_API_URL || localStorage.getItem('cfa_api_url') || '',
   page: 'accueil',
-  data: {}
+  data: {},
+  admin: {
+    unlocked: false,
+    timeoutId: null,
+    TIMEOUT_MS: 15 * 60 * 1000  // 15 minutes
+  }
 };
 
 /* ==========================================================================
@@ -562,6 +646,144 @@ function toast(msg, type='ok'){
   el.textContent = msg;
   wrap.appendChild(el);
   setTimeout(()=>{ el.remove(); }, 3800);
+}
+
+/* ==========================================================================
+   MODE ADMINISTRATEUR
+   ========================================================================== */
+
+/* -- État interne PIN -- */
+let _pinBuffer = '';
+
+/** Ouvre ou ferme le mode admin selon l'état courant */
+function toggleAdmin(){
+  if(state.admin.unlocked){
+    lockAdmin();
+  } else {
+    openPinModal();
+  }
+}
+
+/** Affiche le modal PIN et remet le buffer à zéro */
+function openPinModal(){
+  _pinBuffer = '';
+  _refreshPinDots();
+  document.getElementById('pinOverlay').classList.add('open');
+  // Fermer sur clic en dehors de la box
+  document.getElementById('pinOverlay').onclick = (e) => {
+    if(e.target === document.getElementById('pinOverlay')) closePinModal();
+  };
+}
+
+function closePinModal(){
+  _pinBuffer = '';
+  _refreshPinDots();
+  document.getElementById('pinOverlay').classList.remove('open');
+}
+
+/** Ajoute un chiffre au buffer */
+function pinKey(digit){
+  if(_pinBuffer.length >= 4) return;
+  _pinBuffer += digit;
+  _refreshPinDots();
+  if(_pinBuffer.length === 4) _submitPin();
+}
+
+/** Efface le dernier chiffre */
+function pinDel(){
+  _pinBuffer = _pinBuffer.slice(0,-1);
+  _refreshPinDots();
+}
+
+/** Efface tout */
+function pinClear(){
+  _pinBuffer = '';
+  _refreshPinDots();
+}
+
+/** Met à jour les points visuels */
+function _refreshPinDots(state='default'){
+  for(let i=0;i<4;i++){
+    const dot = document.getElementById('pinDot'+i);
+    dot.className = 'pin-dot';
+    if(state==='error')  dot.classList.add('error');
+    else if(i < _pinBuffer.length) dot.classList.add('filled');
+  }
+}
+
+/** Envoie le PIN au serveur pour vérification */
+async function _submitPin(){
+  // Désactiver le clavier pendant la vérification
+  document.querySelectorAll('.pin-key').forEach(b=>b.disabled=true);
+  try{
+    const result = await apiPost('checkPin', { pin: _pinBuffer });
+    if(result.granted){
+      closePinModal();
+      _unlockAdmin();
+    } else {
+      // Animation d'erreur puis réinitialisation
+      _refreshPinDots('error');
+      setTimeout(()=>{
+        _pinBuffer = '';
+        _refreshPinDots();
+        document.querySelectorAll('.pin-key').forEach(b=>b.disabled=false);
+      }, 900);
+    }
+  } catch(err){
+    _pinBuffer = '';
+    _refreshPinDots();
+    document.querySelectorAll('.pin-key').forEach(b=>b.disabled=false);
+    toast('Erreur de connexion au serveur','err');
+  }
+}
+
+/** Active le mode admin : déverrouille l'UI et lance le timer */
+function _unlockAdmin(){
+  state.admin.unlocked = true;
+  document.body.classList.add('admin-unlocked');
+  // Mettre à jour le bouton cadenas
+  document.getElementById('adminLockBtn').classList.add('active');
+  document.getElementById('adminLockIcon').textContent = '🔓';
+  document.getElementById('adminLockLabel').textContent = 'Admin';
+  // Timer de 15 min
+  _resetAdminTimer();
+  // Écouter l'activité pour réinitialiser le timer
+  ['click','keydown','touchstart'].forEach(evt =>
+    document.addEventListener(evt, _resetAdminTimer, { passive:true })
+  );
+  toast('Mode administrateur activé — verrouillage dans 15 min d\'inactivité','ok');
+}
+
+/** Verrouille le mode admin */
+function lockAdmin(){
+  state.admin.unlocked = false;
+  document.body.classList.remove('admin-unlocked');
+  document.getElementById('adminLockBtn').classList.remove('active');
+  document.getElementById('adminLockIcon').textContent = '🔒';
+  document.getElementById('adminLockLabel').textContent = 'Admin';
+  clearTimeout(state.admin.timeoutId);
+  ['click','keydown','touchstart'].forEach(evt =>
+    document.removeEventListener(evt, _resetAdminTimer)
+  );
+  toast('Mode administrateur désactivé','warn');
+}
+
+/** Réinitialise le timer d'inactivité */
+function _resetAdminTimer(){
+  clearTimeout(state.admin.timeoutId);
+  state.admin.timeoutId = setTimeout(()=>{
+    lockAdmin();
+    toast('Session admin expirée — verrouillé automatiquement','warn');
+  }, state.admin.TIMEOUT_MS);
+}
+
+/** Guard à appeler en tête de chaque action d'écriture.
+ *  Retourne true si l'action peut continuer, false sinon. */
+function requireAdmin(msg){
+  if(state.admin.unlocked) return true;
+  toast(msg || 'Activez le mode administrateur pour modifier','warn');
+  openPinModal();
+  return false;
 }
 
 /* ==========================================================================
@@ -868,6 +1090,11 @@ async function renderSuivi(){
     if(sel) sel.value = r.tpRealise || '';
   }));
 
+  // Désactiver les inputs si mode non-admin
+  const isAdmin = state.admin.unlocked;
+  content.querySelectorAll('.tp-select').forEach(sel=>{ sel.disabled = !isAdmin; });
+  content.querySelectorAll('.eff-input').forEach(inp=>{ inp.disabled = !isAdmin; });
+
   // bind events
   content.querySelectorAll('.tp-select').forEach(sel=>{
     sel.addEventListener('change', ()=> saveSession(sel.dataset.row));
@@ -895,6 +1122,7 @@ function toggleSection(idx){
 }
 
 async function saveSession(rowNumber){
+  if(!requireAdmin('Mode admin requis pour enregistrer une saisie')) return;
   const sel = document.querySelector(`select.tp-select[data-row="${rowNumber}"]`);
   const inp = document.querySelector(`.eff-input[data-row="${rowNumber}"]`);
   const tr = document.querySelector(`tr[data-row="${rowNumber}"]`);
@@ -977,6 +1205,7 @@ async function renderNomenclature(){
 }
 
 async function updateComponentQty(rowNumber, value){
+  if(!requireAdmin()) return;
   try{
     await apiPost('updateNomenclatureComponent', { rowNumber, quantite:value });
     toast('Composant mis à jour', 'ok');
@@ -985,6 +1214,7 @@ async function updateComponentQty(rowNumber, value){
 }
 
 async function deleteComponent(rowNumber){
+  if(!requireAdmin()) return;
   if(!confirm('Supprimer ce composant de la nomenclature ?')) return;
   try{
     await apiPost('deleteNomenclatureComponent', { rowNumber });
@@ -994,6 +1224,7 @@ async function deleteComponent(rowNumber){
 }
 
 function openAddComponent(tpNumero){
+  if(!requireAdmin()) return;
   const catalogue = state.data.catalogueCache;
   openModal(`
     <h3>Ajouter un composant — TP ${escapeHtml(tpNumero)}</h3>
@@ -1037,6 +1268,7 @@ async function fillCatalogueDatalist(){
 let newTPComponents = [];
 let newTPHeader = { numero:'', intitule:'', typeTP:'' };
 function openCreateTP(){
+  if(!requireAdmin()) return;
   newTPComponents = [{ designation:'', quantite:1 }];
   newTPHeader = { numero:'', intitule:'', typeTP:'' };
   renderCreateTPModal();
@@ -1138,6 +1370,7 @@ async function submitCreateTP(){
 
 /* ---------- Modifier / supprimer un TP complet ---------- */
 function openEditTPHeader(oldNumero, oldIntitule, currentTypeKey){
+  if(!requireAdmin()) return;
   openModal(`
     <h3>Modifier le TP ${escapeHtml(oldNumero)}</h3>
     <p class="text-dim" style="font-size:12.5px;margin-top:-8px;margin-bottom:16px;">
@@ -1181,6 +1414,7 @@ function openEditTPHeader(oldNumero, oldIntitule, currentTypeKey){
 }
 
 async function confirmDeleteTP(numero, intitule){
+  if(!requireAdmin()) return;
   const ok = confirm(
     `Supprimer entièrement le TP ${numero} (${intitule || 'sans intitulé'}) ?\n\n` +
     `Tous ses composants seront supprimés de la nomenclature. Les sessions du ` +
@@ -1298,6 +1532,7 @@ async function renderCatalogue(){
  * 3. Recharge les lignes du catalogue pour afficher les nouveaux prix/TP
  */
 async function setPrixModeUI(mode){
+  if(!requireAdmin()) return;
   // Mise à jour visuelle immédiate (sans attendre l'API)
   state.data.prixMode = mode;
   const btnR = document.getElementById('btnReduit');
@@ -1355,6 +1590,7 @@ function renderCatalogueRows(items){
 }
 
 function openAddCatalogueItem(){
+  if(!requireAdmin()) return;
   openModal(`
     <h3>Nouvel article catalogue</h3>
     ${catalogueFormFields()}
@@ -1377,6 +1613,7 @@ function openAddCatalogueItem(){
 }
 
 function openEditCatalogueItem(rowNumber){
+  if(!requireAdmin()) return;
   const item = state.data.catalogueCache.items.find(i=>i.rowNumber===rowNumber);
   if(!item) return;
   openModal(`
@@ -1401,6 +1638,7 @@ function openEditCatalogueItem(rowNumber){
 }
 
 async function deleteCatalogueItem(rowNumber){
+  if(!requireAdmin()) return;
   if(!confirm('Supprimer cet article du catalogue ?')) return;
   try{
     await apiPost('deleteCatalogueItem', { rowNumber });
@@ -1501,5 +1739,34 @@ function closeModal(){
   render();
 })();
 </script>
+  <!-- ====== MODAL PIN ADMIN ====== -->
+  <div class="pin-overlay" id="pinOverlay" role="dialog" aria-modal="true" aria-label="Authentification administrateur">
+    <div class="pin-box">
+      <h3>🔐 Accès administrateur</h3>
+      <p>Saisissez votre code PIN pour activer les modifications</p>
+      <div class="pin-dots" id="pinDots">
+        <div class="pin-dot" id="pinDot0"></div>
+        <div class="pin-dot" id="pinDot1"></div>
+        <div class="pin-dot" id="pinDot2"></div>
+        <div class="pin-dot" id="pinDot3"></div>
+      </div>
+      <div class="pin-keypad">
+        <button class="pin-key" onclick="pinKey('1')">1</button>
+        <button class="pin-key" onclick="pinKey('2')">2</button>
+        <button class="pin-key" onclick="pinKey('3')">3</button>
+        <button class="pin-key" onclick="pinKey('4')">4</button>
+        <button class="pin-key" onclick="pinKey('5')">5</button>
+        <button class="pin-key" onclick="pinKey('6')">6</button>
+        <button class="pin-key" onclick="pinKey('7')">7</button>
+        <button class="pin-key" onclick="pinKey('8')">8</button>
+        <button class="pin-key" onclick="pinKey('9')">9</button>
+        <button class="pin-key del" onclick="pinDel()">⌫</button>
+        <button class="pin-key" onclick="pinKey('0')">0</button>
+        <button class="pin-key del" onclick="pinClear()">✕</button>
+      </div>
+      <button class="pin-cancel" onclick="closePinModal()">Annuler</button>
+    </div>
+  </div>
+
 </body>
 </html>
